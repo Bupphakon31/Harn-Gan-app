@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harn-Gan</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="page-shell">
+        <aside class="hero-panel">
+            <p class="eyebrow">Harn-Gan</p>
+            <h1>คำนวณบิลแบบเว็บ โดยยังเก็บ feature เดิมครบ</h1>
+            <p class="hero-copy">
+                รองรับการหารตามรายการ, หารเท่ากัน, คนมาทีหลัง, คนฟรี, และการคำนวณการจ่ายเงินทั้งแบบคนเดียวออกหรือหลายคนช่วยกันออก
+            </p>
+            <div class="hero-stats">
+                <div><strong>2</strong><span>Split modes</span></div>
+                <div><strong>2</strong><span>Payment modes</span></div>
+                <div><strong>ครบ</strong><span>Late joiner + free people</span></div>
+            </div>
+        </aside>
+
+        <main class="workspace">
+            <section class="card">
+                <div class="card-header">
+                    <div>
+                        <p class="eyebrow">Workflow</p>
+                        <h2>ตั้งค่าการหารบิล</h2>
+                    </div>
+                    <div class="step-pills">
+                        <button class="step-pill active" data-step-target="1" type="button">1. รูปแบบ</button>
+                        <button class="step-pill" data-step-target="2" type="button">2. คนและรายการ</button>
+                        <button class="step-pill" data-step-target="3" type="button">3. ค่าใช้จ่ายเพิ่ม</button>
+                        <button class="step-pill" data-step-target="4" type="button">4. วิธีจ่าย</button>
+                    </div>
+                </div>
+
+                <div id="errorBanner" class="error-banner" hidden></div>
+
+                <form id="billForm">
+                    <section class="form-step active" data-step="1">
+                        <div class="section-title">
+                            <h3>เลือก split mode</h3>
+                            <p>กำหนดว่าจะหารตามรายการอาหาร หรือหารเท่ากันทุกคน</p>
+                        </div>
+                        <div class="choice-grid">
+                            <label class="choice-card">
+                                <input type="radio" name="mode" value="1" checked>
+                                <span class="choice-badge">Item-based</span>
+                                <strong>หารตามรายการอาหาร</strong>
+                                <small>ระบุชื่อรายการ ราคา และคนที่กินแต่ละจาน</small>
+                            </label>
+                            <label class="choice-card">
+                                <input type="radio" name="mode" value="2">
+                                <span class="choice-badge">Even split</span>
+                                <strong>หารเท่ากัน</strong>
+                                <small>ใส่ยอดรวมทั้งหมด แล้วเฉลี่ยเท่ากันทุกคน</small>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="form-step" data-step="2">
+                        <div class="section-title">
+                            <h3>รายชื่อและข้อมูลบิล</h3>
+                            <p>กรอกเพื่อนก่อน แล้วค่อยเพิ่มรายการอาหารหรือยอดรวม</p>
+                        </div>
+                        <div class="panel-grid">
+                            <div class="subpanel">
+                                <div class="subpanel-header">
+                                    <div>
+                                        <h4>รายชื่อเพื่อน</h4>
+                                        <p>คนที่ตั้งต้นอยู่ในโต๊ะ</p>
+                                    </div>
+                                    <button id="addFriendBtn" class="btn btn-secondary" type="button">เพิ่มเพื่อน</button>
+                                </div>
+                                <div id="friendsContainer" class="stack-list"></div>
+                            </div>
+
+                            <div id="itemsPanel" class="subpanel">
+                                <div class="subpanel-header">
+                                    <div>
+                                        <h4>รายการอาหาร</h4>
+                                        <p>ใส่ชื่อคนกินคั่นด้วย comma เช่น Mint,Bank</p>
+                                    </div>
+                                    <button id="addItemBtn" class="btn btn-secondary" type="button">เพิ่มรายการ</button>
+                                </div>
+                                <div id="itemsContainer" class="stack-list"></div>
+                                <p class="hint">ถ้ามีชื่อที่ไม่อยู่ในรายชื่อเพื่อน ระบบจะนับเป็นคนมาทีหลังให้อัตโนมัติ</p>
+                            </div>
+
+                            <div id="totalPanel" class="subpanel" hidden>
+                                <div class="subpanel-header">
+                                    <div>
+                                        <h4>ยอดรวมทั้งหมด</h4>
+                                        <p>ใช้กับโหมดหารเท่ากัน</p>
+                                    </div>
+                                </div>
+                                <label class="field">
+                                    <span>ยอดรวมก่อน service charge / VAT</span>
+                                    <input id="totalAmount" type="number" min="0" step="0.01" placeholder="0.00">
+                                </label>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="form-step" data-step="3">
+                        <div class="section-title">
+                            <h3>ค่าใช้จ่ายเพิ่มเติม</h3>
+                            <p>กำหนด service charge, VAT, ค่าส่ง และส่วนลด</p>
+                        </div>
+                        <div class="field-grid">
+                            <label class="field"><span>Service charge (%)</span><input id="serviceCharge" type="number" min="0" step="0.01" value="0"></label>
+                            <label class="field"><span>VAT (%)</span><input id="vat" type="number" min="0" step="0.01" value="0"></label>
+                            <label class="field"><span>Shipping fee</span><input id="shippingFee" type="number" min="0" step="0.01" value="0"></label>
+                            <label class="field"><span>Discount</span><input id="discount" type="number" min="0" step="0.01" value="0"></label>
+                        </div>
+                        <div class="toggle-row">
+                            <label class="checkbox-chip">
+                                <input id="hasFreePeople" type="checkbox">
+                                <span>มีคนที่ไม่ต้องจ่าย</span>
+                            </label>
+                        </div>
+                        <div id="freePeopleSection" class="subpanel" hidden>
+                            <div class="subpanel-header">
+                                <div>
+                                    <h4>เลือกคนฟรี</h4>
+                                    <p>ยอดของคนเหล่านี้จะถูก redistribute ให้คนอื่น</p>
+                                </div>
+                            </div>
+                            <div id="freePeopleContainer" class="checkbox-grid"></div>
+                        </div>
+                    </section>
+
+                    <section class="form-step" data-step="4">
+                        <div class="section-title">
+                            <h3>วิธีการจ่ายเงิน</h3>
+                            <p>เลือกว่าจะมีคนเดียวออกก่อน หรือหลายคนช่วยกันจ่าย</p>
+                        </div>
+                        <div class="choice-grid compact">
+                            <label class="choice-card">
+                                <input type="radio" name="paymentMode" value="1" checked>
+                                <span class="choice-badge">Single payer</span>
+                                <strong>คนเดียวออกก่อน</strong>
+                                <small>ระบบจะแสดงว่าใครต้องโอนคืนให้ใคร</small>
+                            </label>
+                            <label class="choice-card">
+                                <input type="radio" name="paymentMode" value="2">
+                                <span class="choice-badge">Multi payer</span>
+                                <strong>หลายคนช่วยกันออก</strong>
+                                <small>ระบุว่าแต่ละคนจ่ายจริงเท่าไร แล้วคำนวณคงเหลือ</small>
+                            </label>
+                        </div>
+                        <div id="singlePayerSection" class="subpanel">
+                            <label class="field">
+                                <span>คนที่ออกเงินทั้งหมด</span>
+                                <select id="singlePayer"></select>
+                            </label>
+                        </div>
+                        <div id="multiPayersSection" class="subpanel" hidden>
+                            <div class="subpanel-header">
+                                <div>
+                                    <h4>คนที่ช่วยกันออกเงิน</h4>
+                                    <p>ติ๊กเลือกก่อน แล้วใส่จำนวนเงินจริงที่จ่าย</p>
+                                </div>
+                            </div>
+                            <div id="multiPayersContainer" class="checkbox-grid"></div>
+                            <div id="multiPayerAmountsContainer" class="field-grid narrow"></div>
+                        </div>
+                    </section>
+
+                    <div class="form-footer">
+                        <div class="nav-actions">
+                            <button id="prevBtn" class="btn btn-secondary" type="button">ย้อนกลับ</button>
+                            <button id="nextBtn" class="btn" type="button">ถัดไป</button>
+                        </div>
+                        <button id="calculateBtn" class="btn btn-primary" type="submit" hidden>คำนวณบิล</button>
+                    </div>
+                </form>
+            </section>
+
+            <section id="resultsSection" class="card results-card" hidden>
+                <div class="card-header">
+                    <div>
+                        <p class="eyebrow">Result</p>
+                        <h2>ผลลัพธ์การคำนวณ</h2>
+                    </div>
+                    <button id="resetBtn" class="btn btn-secondary" type="button">เริ่มใหม่</button>
+                </div>
+
+                <div class="result-grid">
+                    <article class="result-panel">
+                        <h3>สรุปต่อคน</h3>
+                        <div id="summaryTable"></div>
+                    </article>
+                    <article class="result-panel">
+                        <h3>Breakdown</h3>
+                        <div id="costBreakdown" class="metric-list"></div>
+                    </article>
+                </div>
+
+                <article id="lateJoinersSection" class="result-panel" hidden>
+                    <h3>คนมาทีหลัง</h3>
+                    <div id="lateJoinersTable"></div>
+                </article>
+
+                <article id="paymentDetailsSection" class="result-panel" hidden>
+                    <h3>รายละเอียดการจ่ายเงิน</h3>
+                    <div id="paymentDetails"></div>
+                </article>
+            </section>
+        </main>
+    </div>
+
+    <template id="friendRowTemplate">
+        <div class="inline-card friend-row">
+            <label class="field grow">
+                <span>ชื่อเพื่อน</span>
+                <input type="text" class="friend-name" placeholder="เช่น Mint">
+            </label>
+            <button class="icon-btn remove-row" type="button" aria-label="ลบ">×</button>
+        </div>
+    </template>
+
+    <template id="itemRowTemplate">
+        <div class="inline-card item-row">
+            <label class="field grow">
+                <span>ชื่อรายการ</span>
+                <input type="text" class="item-name" placeholder="เช่น Pizza">
+            </label>
+            <label class="field price-field">
+                <span>ราคา</span>
+                <input type="number" class="item-price" min="0" step="0.01" placeholder="0.00">
+            </label>
+            <label class="field grow">
+                <span>คนกิน</span>
+                <input type="text" class="item-eaters" placeholder="เช่น Mint,Bank">
+            </label>
+            <button class="icon-btn remove-row" type="button" aria-label="ลบ">×</button>
+        </div>
+    </template>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
