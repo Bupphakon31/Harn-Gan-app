@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream: #fff8f3;
+  --color-warm: #fff1ea;
+  --color-soft: #fffdfb;
+  --color-accent: #e98574;
+  --color-accent-strong: #d86756;
+  --color-accent-deep: #a74e43;
+  --color-accent-cream: #ffd9ce;
+  --color-mint: #9dd2b1;
+  --color-surface: rgba(255, 252, 248, 0.96);
+  --color-text-primary: #35211d;
+  --color-text-secondary: #7d6159;
+  --color-text-muted: #a58a82;
+  --color-danger: #d15d67;
+  --color-success: #2f8b57;
+  --color-warning: #d18f36;
+
+  --font-serif: Georgia, "Times New Roman", serif;
+  --font-sans: "Segoe UI", "Noto Sans Thai", Tahoma, sans-serif;
+  --font-mono: "Consolas", "SFMono-Regular", monospace;
+
+  --radius-xl: 30px;
+  --radius-lg: 22px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  background:
+    radial-gradient(circle at top left, rgba(255, 214, 204, 0.70), transparent 30%),
+    radial-gradient(circle at top right, rgba(182, 230, 204, 0.55), transparent 26%),
+    linear-gradient(180deg, #fff7f2 0%, #fffaf7 42%, #fff5ef 100%);
+}
+
+button, input, select {
+  font: inherit;
+  appearance: none;
+}

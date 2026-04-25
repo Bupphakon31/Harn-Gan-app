@@ -6,6 +6,39 @@ const calculations = require('./utilities/calculations');
 const app = express();
 const PORT = 3000;
 
+const toNonNegativeNumber = (value, fallback = 0) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+
+const normalizeNames = (values = []) => {
+    if (!Array.isArray(values)) {
+        return [];
+    }
+
+    return [...new Set(
+        values
+            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+            .filter(Boolean)
+    )];
+};
+
+const normalizeItems = (items = []) => {
+    if (!Array.isArray(items)) {
+        return [];
+    }
+
+    return items
+        .filter((item) => item && typeof item === 'object')
+        .map((item) => ({
+            ...item,
+            name: typeof item.name === 'string' ? item.name.trim() : '',
+            price: toNonNegativeNumber(item.price),
+            eaters: normalizeNames(item.eaters),
+        }))
+        .filter((item) => item.name || item.price || item.eaters.length > 0);
+};
+
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
@@ -30,45 +63,65 @@ app.post('/api/calculate', (req, res) => {
             lateJoiners
         } = req.body;
 
+        const normalizedFriends = normalizeNames(friends);
+        const normalizedItems = normalizeItems(items);
+        const normalizedFreePeople = normalizeNames(freePeople).filter((name) => normalizedFriends.includes(name));
+        const normalizedLateJoiners = normalizeNames(lateJoiners);
+
+        if (normalizedFriends.length === 0) {
+            return res.status(400).json({ error: 'Missing friends' });
+        }
+
+        if (normalizedFreePeople.length >= normalizedFriends.length) {
+            return res.status(400).json({ error: 'ต้องมีคนจ่ายอย่างน้อย 1 คน' });
+        }
+
         let result;
 
         if (mode === 1) {
             result = calculations.calculateDetailedSplit({
-                friends,
-                items,
-                serviceChargePercent: parseFloat(serviceChargePercent) || 0,
-                vatPercent: parseFloat(vatPercent) || 0,
-                shippingFee: parseFloat(shippingFee) || 0,
-                discount: parseFloat(discount) || 0
+                friends: normalizedFriends,
+                items: normalizedItems,
+                serviceChargePercent: toNonNegativeNumber(serviceChargePercent),
+                vatPercent: toNonNegativeNumber(vatPercent),
+                shippingFee: toNonNegativeNumber(shippingFee),
+                discount: toNonNegativeNumber(discount)
             });
         } else if (mode === 2) {
             result = calculations.calculateEvenSplit({
-                friends,
-                serviceChargePercent: parseFloat(serviceChargePercent) || 0,
-                vatPercent: parseFloat(vatPercent) || 0,
-                shippingFee: parseFloat(shippingFee) || 0,
-                discount: parseFloat(discount) || 0,
-                totalAmount: parseFloat(totalAmount) || 0
+                friends: normalizedFriends,
+                serviceChargePercent: toNonNegativeNumber(serviceChargePercent),
+                vatPercent: toNonNegativeNumber(vatPercent),
+                shippingFee: toNonNegativeNumber(shippingFee),
+                discount: toNonNegativeNumber(discount),
+                totalAmount: toNonNegativeNumber(totalAmount)
             });
         } else {
             return res.status(400).json({ error: 'Invalid mode' });
         }
 
-        if (freePeople && freePeople.length > 0) {
-            result = calculations.applyFreePeople(result, friends, freePeople, items || []);
+        if (normalizedFreePeople.length > 0) {
+            result = calculations.applyFreePeople(result, normalizedFriends, normalizedFreePeople);
+            result.freePeople = normalizedFreePeople;
         }
 
         let paymentDetails = null;
         if (paymentMode === 1 && payerInfo && payerInfo.payer) {
-            paymentDetails = calculations.calculateSinglePayerPayment(result, payerInfo.payer);
+            const payer = typeof payerInfo.payer === 'string' ? payerInfo.payer.trim() : '';
+            if (!payer) {
+                return res.status(400).json({ error: 'กรุณาเลือกคนที่ออกเงินก่อน' });
+            }
+            paymentDetails = calculations.calculateSinglePayerPayment(result, payer);
         } else if (paymentMode === 2 && payerInfo && payerInfo.payers) {
             paymentDetails = calculations.calculateMultiPayerPayment(result, payerInfo.payers);
         }
 
-        if (lateJoiners && lateJoiners.length > 0 && mode === 1) {
-            result.lateJoiners = lateJoiners.map((name) => ({
+        if (normalizedLateJoiners.length > 0 && mode === 1) {
+            result.lateJoiners = normalizedLateJoiners.map((name) => ({
                 name,
-                items: items.filter((item) => item.eaters.includes(name)).map((item) => item.name)
+                items: normalizedItems
+                    .filter((item) => item.eaters.includes(name))
+                    .map((item) => item.name)
             }));
         }
 

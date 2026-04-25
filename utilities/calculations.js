@@ -1,20 +1,56 @@
+const toNumber = (value, fallback = 0) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const toCents = (value) => Math.round(toNumber(value) * 100);
+
+const fromCents = (value) => (value / 100).toFixed(2);
+
 // ฟังก์ชันคำนวนการแบ่งบิลแบบละเอียด (Item-based Split)
 function calculateDetailedSplit(data) {
-    const { friends, items, serviceChargePercent, vatPercent, shippingFee, discount } = data;
-    
+    const friends = Array.isArray(data.friends) ? data.friends : [];
+    const items = Array.isArray(data.items) ? data.items : [];
+    const serviceChargePercent = toNumber(data.serviceChargePercent);
+    const vatPercent = toNumber(data.vatPercent);
+    const shippingFee = toNumber(data.shippingFee);
+    const discount = toNumber(data.discount);
+
+    if (friends.length === 0) {
+        throw new Error('กรุณาใส่ชื่อเพื่อนอย่างน้อย 1 คน');
+    }
+
+    if (items.length === 0) {
+        throw new Error('กรุณาเพิ่มรายการอาหารอย่างน้อย 1 รายการ');
+    }
+
     // 1. สร้าง Object สำหรับเก็บยอดของแต่ละคน
-    let individualTotals = {};
-    friends.forEach(name => individualTotals[name] = 0);
+    const individualTotals = {};
+    friends.forEach((name) => {
+        individualTotals[name] = 0;
+    });
 
     // 2. คำนวนราคาอาหารแต่ละรายการ หารตามจำนวนคนกิน
     let subtotalAll = 0;
-    items.forEach(item => {
-        const pricePerPerson = item.price / item.eaters.length;
-        item.eaters.forEach(eater => {
+    items.forEach((item) => {
+        if (!item || !item.eaters || item.eaters.length === 0) {
+            throw new Error(`รายการ ${item?.name || '-'} ต้องมีคนกินอย่างน้อย 1 คน`);
+        }
+
+        const itemPrice = toNumber(item.price);
+        const pricePerPerson = itemPrice / item.eaters.length;
+        item.eaters.forEach((eater) => {
+            if (individualTotals[eater] === undefined) {
+                individualTotals[eater] = 0;
+            }
             individualTotals[eater] += pricePerPerson;
         });
-        subtotalAll += item.price;
+        subtotalAll += itemPrice;
     });
+
+    if (subtotalAll <= 0) {
+        throw new Error('ยอดอาหารต้องมากกว่า 0');
+    }
 
     // 3. คำนวนหา Multiplier (ตัวคูณภาษีและค่าบริการ)
     const totalServiceCharge = subtotalAll * (serviceChargePercent / 100);
@@ -25,13 +61,11 @@ function calculateDetailedSplit(data) {
     const multiplier = finalGrandTotal / subtotalAll;
 
     // 4. สรุปยอดรายคน
-    const finalSplit = friends.map(name => {
-        return {
-            name: name,
-            totalToPay: (individualTotals[name] * multiplier).toFixed(2),
-            baseAmount: individualTotals[name].toFixed(2)
-        };
-    });
+    const finalSplit = friends.map((name) => ({
+        name,
+        totalToPay: (individualTotals[name] * multiplier).toFixed(2),
+        baseAmount: individualTotals[name].toFixed(2)
+    }));
 
     return {
         summary: finalSplit,
@@ -46,23 +80,34 @@ function calculateDetailedSplit(data) {
 
 // ฟังก์ชันคำนวนการแบ่งบิลแบบเท่าๆ กัน (Even Split)
 function calculateEvenSplit(data) {
-    const { friends, serviceChargePercent, vatPercent, shippingFee, discount, totalAmount } = data;
-    
+    const friends = Array.isArray(data.friends) ? data.friends : [];
+    const serviceChargePercent = toNumber(data.serviceChargePercent);
+    const vatPercent = toNumber(data.vatPercent);
+    const shippingFee = toNumber(data.shippingFee);
+    const discount = toNumber(data.discount);
+    const totalAmount = toNumber(data.totalAmount);
+
+    if (friends.length === 0) {
+        throw new Error('กรุณาใส่ชื่อเพื่อนอย่างน้อย 1 คน');
+    }
+
+    if (totalAmount <= 0) {
+        throw new Error('กรุณากรอกยอดรวมให้มากกว่า 0');
+    }
+
     const totalServiceCharge = totalAmount * (serviceChargePercent / 100);
     const totalVat = (totalAmount + totalServiceCharge + shippingFee) * (vatPercent / 100);
     const grandTotalBeforeDiscount = totalAmount + totalServiceCharge + shippingFee + totalVat;
     const finalGrandTotal = grandTotalBeforeDiscount - discount;
-    
+
     const amountPerPerson = (finalGrandTotal / friends.length).toFixed(2);
-    
-    const finalSplit = friends.map(name => {
-        return {
-            name: name,
-            totalToPay: amountPerPerson,
-            baseAmount: (totalAmount / friends.length).toFixed(2)
-        };
-    });
-    
+
+    const finalSplit = friends.map((name) => ({
+        name,
+        totalToPay: amountPerPerson,
+        baseAmount: (totalAmount / friends.length).toFixed(2)
+    }));
+
     return {
         summary: finalSplit,
         grandTotal: finalGrandTotal.toFixed(2),
@@ -76,111 +121,188 @@ function calculateEvenSplit(data) {
 
 // ฟังก์ชันคำนวนการแบ่งบิลพร้อม adjustment สำหรับคนฟรี
 function applyFreePeople(result, friends, freePeople, items) {
-    if (freePeople.length === 0) {
+    const freeNames = Array.isArray(freePeople)
+        ? [...new Set(freePeople.map((name) => (typeof name === 'string' ? name.trim() : '')).filter(Boolean))]
+        : [];
+
+    if (freeNames.length === 0) {
         return result;
     }
 
-    const subtractAmount = freePeople.reduce((sum, name) => {
-        return sum + parseFloat(result.summary.find(p => p.name === name).totalToPay);
-    }, 0);
-    
-    const remainingFriends = friends.filter(f => !freePeople.includes(f));
-    const remainingGrandTotal = parseFloat(result.grandTotal) - subtractAmount;
-    
-    const adjustedSummary = remainingFriends.map(name => {
-        const originalAmount = parseFloat(result.summary.find(p => p.name === name).totalToPay);
-        const redistributed = (originalAmount / remainingFriends.reduce((sum, f) => {
-            return sum + parseFloat(result.summary.find(p => p.name === f).totalToPay);
-        }, 0)) * remainingGrandTotal;
-        
-        return {
-            name: name,
-            totalToPay: redistributed.toFixed(2),
-            baseAmount: result.summary.find(p => p.name === name).baseAmount
-        };
-    });
-    
-    // เพิ่มคนฟรีเข้าไป
-    freePeople.forEach(name => {
+    const summary = Array.isArray(result.summary) ? result.summary : [];
+    const freeSet = new Set(freeNames);
+    const paidSummary = summary.filter((person) => !freeSet.has(person.name));
+    const freeSummary = summary.filter((person) => freeSet.has(person.name));
+
+    if (paidSummary.length === 0) {
+        throw new Error('ต้องมีคนจ่ายอย่างน้อย 1 คน');
+    }
+
+    const removedAmount = freeSummary.reduce((sum, person) => sum + toNumber(person.totalToPay), 0);
+    const remainingGrandTotal = Math.max(toNumber(result.grandTotal) - removedAmount, 0);
+    const remainingOriginalTotal = paidSummary.reduce((sum, person) => sum + toNumber(person.totalToPay), 0);
+    const ratio = remainingOriginalTotal > 0 ? remainingGrandTotal / remainingOriginalTotal : 0;
+
+    const adjustedSummary = paidSummary.map((person) => ({
+        ...person,
+        totalToPay: (toNumber(person.totalToPay) * ratio).toFixed(2)
+    }));
+
+    freeSummary.forEach((person) => {
         adjustedSummary.push({
-            name: name,
+            ...person,
             totalToPay: '0.00',
-            baseAmount: result.summary.find(p => p.name === name).baseAmount,
             isFree: true
         });
     });
-    
+
     return {
         ...result,
         summary: adjustedSummary,
-        grandTotal: remainingGrandTotal.toFixed(2)
+        grandTotal: remainingGrandTotal.toFixed(2),
+        freePeople: freeNames
     };
 }
 
 // ฟังก์ชันคำนวนการชำระเงินเมื่อคนเดียวออก
 function calculateSinglePayerPayment(result, payer) {
-    const summary = result.summary;
-    const grandTotal = parseFloat(result.grandTotal);
-    
-    const details = {
-        payer: payer,
-        totalPaid: grandTotal,
-        breakdown: []
+    const summary = Array.isArray(result.summary) ? result.summary : [];
+    const freePeople = Array.isArray(result.freePeople)
+        ? result.freePeople.map((name) => (typeof name === 'string' ? name.trim() : '')).filter(Boolean)
+        : [];
+    const freeSet = new Set(freePeople);
+    const grandTotalCents = toCents(result.grandTotal);
+    const payerName = typeof payer === 'string' ? payer.trim() : '';
+    const payerEntry = summary.find((person) => person.name === payerName);
+
+    if (!payerName) {
+        throw new Error('กรุณาเลือกคนที่ออกเงินก่อน');
+    }
+
+    if (!payerEntry) {
+        throw new Error('ไม่พบชื่อคนที่ออกเงินก่อนในรายชื่อ');
+    }
+
+    if (payerEntry.isFree || freeSet.has(payerName)) {
+        throw new Error('คนฟรีไม่สามารถเป็นคนออกเงินก่อน');
+    }
+
+    const payerShareCents = toCents(payerEntry.totalToPay);
+    const expectedToReceiveCents = Math.max(grandTotalCents - payerShareCents, 0);
+
+    const breakdownEntries = summary
+        .filter((person) => person.name !== payerName && !person.isFree)
+        .map((person) => ({
+            from: person.name,
+            amountCents: Math.max(toCents(person.totalToPay), 0)
+        }))
+        .filter((entry) => entry.amountCents > 0);
+
+    let totalToReceiveCents = breakdownEntries.reduce((sum, entry) => sum + entry.amountCents, 0);
+    const differenceCents = expectedToReceiveCents - totalToReceiveCents;
+
+    if (breakdownEntries.length > 0 && differenceCents !== 0) {
+        const lastEntry = breakdownEntries[breakdownEntries.length - 1];
+        lastEntry.amountCents = Math.max(lastEntry.amountCents + differenceCents, 0);
+        totalToReceiveCents = breakdownEntries.reduce((sum, entry) => sum + entry.amountCents, 0);
+    }
+
+    return {
+        payer: payerName,
+        payerShare: fromCents(payerShareCents),
+        totalPaid: fromCents(grandTotalCents),
+        totalToReceive: fromCents(totalToReceiveCents),
+        netAmount: fromCents(payerShareCents),
+        breakdown: breakdownEntries.map((entry) => ({
+            from: entry.from,
+            to: payerName,
+            amount: fromCents(entry.amountCents)
+        }))
     };
-    
-    let totalToReceive = 0;
-    summary.forEach(person => {
-        if (person.name !== payer) {
-            const amount = parseFloat(person.totalToPay);
-            details.breakdown.push({
-                from: person.name,
-                to: payer,
-                amount: amount.toFixed(2)
-            });
-            totalToReceive += amount;
-        }
-    });
-    
-    details.netAmount = (grandTotal - totalToReceive).toFixed(2);
-    
-    return details;
 }
 
 // ฟังก์ชันคำนวนการชำระเงินเมื่อหลายคนออก
 function calculateMultiPayerPayment(result, payers) {
-    const summary = result.summary;
+    const summary = Array.isArray(result.summary) ? result.summary : [];
+    const summaryNames = new Set(summary.map((person) => person.name));
+    const freePeople = Array.isArray(result.freePeople)
+        ? result.freePeople.map((name) => (typeof name === 'string' ? name.trim() : '')).filter(Boolean)
+        : [];
+    const freeSet = new Set(freePeople);
+    const normalizedPayers = Array.isArray(payers)
+        ? payers
+            .filter((p) => p && typeof p === 'object')
+            .map((p) => ({
+                name: typeof p.name === 'string' ? p.name.trim() : '',
+                amountCents: toCents(p.amount)
+            }))
+            .filter((p) => p.name)
+        : [];
+
+    if (normalizedPayers.length === 0) {
+        throw new Error('กรุณาเลือกคนที่ช่วยกันออกเงินอย่างน้อย 1 คน');
+    }
+
+    const invalidPayer = normalizedPayers.find((p) => !summaryNames.has(p.name) || freeSet.has(p.name) || summary.find((person) => person.name === p.name)?.isFree);
+    if (invalidPayer) {
+        throw new Error(`ไม่พบชื่อ ${invalidPayer.name} ในรายชื่อผู้จ่ายที่ใช้ได้`);
+    }
+
+    const invalidAmount = normalizedPayers.find((p) => p.amountCents <= 0);
+    if (invalidAmount) {
+        throw new Error(`กรุณาใส่ยอดจ่ายจริงของ ${invalidAmount.name}`);
+    }
+
+    const payerMap = {};
+    normalizedPayers.forEach((payer) => {
+        if (!payerMap[payer.name]) {
+            payerMap[payer.name] = {
+                name: payer.name,
+                amountCents: 0
+            };
+        }
+
+        payerMap[payer.name].amountCents += payer.amountCents;
+    });
+
     const paymentMap = {};
-    
-    payers.forEach(p => {
-        paymentMap[p.name] = {
-            paid: p.amount,
-            shouldPay: parseFloat(result.summary.find(s => s.name === p.name).totalToPay)
+
+    Object.values(payerMap).forEach((payer) => {
+        paymentMap[payer.name] = {
+            paidCents: payer.amountCents,
+            shouldPayCents: toCents(summary.find((s) => s.name === payer.name)?.totalToPay)
         };
     });
-    
+
     const breakdown = [];
-    
-    summary.forEach(person => {
-        const paid = paymentMap[person.name] ? paymentMap[person.name].paid : 0;
-        const shouldPay = parseFloat(person.totalToPay);
-        const diff = shouldPay - paid;
-        
-        if (diff > 0) {
-            // ต้องจ่ายเพิ่มเติม
+
+    summary.forEach((person) => {
+        if (person.isFree) {
+            breakdown.push({
+                person: person.name,
+                type: 'exact',
+                amount: '0.00'
+            });
+            return;
+        }
+
+        const paidCents = paymentMap[person.name] ? paymentMap[person.name].paidCents : 0;
+        const shouldPayCents = toCents(person.totalToPay);
+        const diffCents = shouldPayCents - paidCents;
+
+        if (diffCents > 0) {
             breakdown.push({
                 person: person.name,
                 type: 'pay',
-                amount: diff.toFixed(2)
+                amount: fromCents(diffCents)
             });
-        } else if (diff < 0) {
-            // ได้เงินคืน
+        } else if (diffCents < 0) {
             breakdown.push({
                 person: person.name,
                 type: 'receive',
-                amount: Math.abs(diff).toFixed(2)
+                amount: fromCents(Math.abs(diffCents))
             });
         } else {
-            // จ่ายพอดี
             breakdown.push({
                 person: person.name,
                 type: 'exact',
@@ -188,10 +310,14 @@ function calculateMultiPayerPayment(result, payers) {
             });
         }
     });
-    
+
     return {
-        payers: payers,
-        breakdown: breakdown
+        payers: Object.values(payerMap).map((payer) => ({
+            name: payer.name,
+            amount: fromCents(payer.amountCents)
+        })),
+        breakdown,
+        totalPaid: fromCents(Object.values(payerMap).reduce((sum, p) => sum + p.amountCents, 0))
     };
 }
 
